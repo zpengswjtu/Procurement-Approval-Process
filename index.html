@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>采购预算审批流程模拟沙盘</title>
+<style>
+:root{
+  --blue:#2563eb; --blue-light:#dbeafe; --green:#16a34a; --green-light:#dcfce7;
+  --red:#dc2626; --red-light:#fee2e2; --amber:#d97706; --amber-light:#fef3c7;
+  --gray:#64748b; --border:#e2e8f0; --bg:#f1f5f9; --ink:#0f172a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:linear-gradient(135deg,#1e40af,#2563eb);color:#fff;padding:18px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{font-size:20px;font-weight:600}
+header .sub{opacity:.85;font-size:12px;margin-top:4px}
+.badge{background:rgba(255,255,255,.2);padding:6px 14px;border-radius:20px;font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 340px;gap:20px}
+@media(max-width:960px){main{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:18px}
+.card h2{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card h2 .tag{font-size:11px;font-weight:400;color:var(--gray)}
+
+/* 流程时间线 */
+.flow{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:14px;position:relative;padding-bottom:6px}
+.step .rail{display:flex;flex-direction:column;align-items:center;width:44px;flex-shrink:0}
+.step .dot{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;border:3px solid var(--border);background:#fff;color:var(--gray);cursor:pointer;transition:.2s;flex-shrink:0}
+.step .dot.active{border-color:var(--blue);color:var(--blue);background:var(--blue-light);box-shadow:0 0 0 4px rgba(37,99,235,.15);animation:pulse 1.6s infinite}
+.step .dot.done{border-color:var(--green);color:#fff;background:var(--green)}
+.step .dot.rejected{border-color:var(--red);color:#fff;background:var(--red)}
+.step .line{width:3px;flex:1;background:var(--border);min-height:26px}
+.step .line.done{background:var(--green)}
+.step .body{padding-bottom:12px;flex:1}
+.step .title{font-weight:600;margin-top:9px}
+.step .owner{font-size:12px;color:var(--gray);margin-top:2px}
+.step .checks{font-size:12px;color:#475569;margin-top:4px;line-height:1.6}
+.step.current .title{color:var(--blue)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(37,99,235,.12)}50%{box-shadow:0 0 0 8px rgba(37,99,235,.05)}}
+.hint{margin-top:4px;font-size:12px;color:var(--blue);background:var(--blue-light);padding:6px 10px;border-radius:8px;display:inline-block}
+
+/* 操作面板 */
+.actions{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.btn{border:none;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer;font-weight:500;transition:.15s;width:100%}
+.btn:hover{filter:brightness(1.08)}
+.btn.approve{background:var(--green);color:#fff}
+.btn.reject{background:#fff;color:var(--red);border:1.5px solid var(--red)}
+.btn.secondary{background:#eef2f7;color:#334155}
+.btn.primary{background:var(--blue);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal-mask.show{display:flex}
+.modal{background:#fff;border-radius:14px;padding:22px;max-width:560px;width:100%;max-height:88vh;overflow:auto}
+.modal h3{margin-bottom:12px;font-size:16px}
+.modal label{display:block;font-size:13px;color:var(--gray);margin:12px 0 6px}
+.modal input,.modal textarea,.modal select{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 10px;font-size:14px;font-family:inherit}
+.modal textarea{resize:vertical;min-height:70px}
+.modal input:focus,.modal textarea:focus,.modal select:focus{outline:none;border-color:var(--blue)}
+.modal .foot{display:flex;gap:10px;margin-top:18px;justify-content:flex-end}
+.modal .foot button{width:auto;padding:9px 20px}
+.err{color:var(--red);font-size:12px;margin-top:6px;display:none}
+
+/* 侧栏 */
+.log{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.log-item{border-left:3px solid var(--border);padding:6px 10px;font-size:12.5px;line-height:1.6;background:#f8fafc;border-radius:0 8px 8px 0}
+.log-item.approve{border-color:var(--green)}
+.log-item.reject{border-color:var(--red)}
+.log-item.info{border-color:var(--blue)}
+.log-item .t{color:var(--gray);font-size:11px}
+.summary{display:flex;gap:10px;margin-bottom:12px}
+.summary .box{flex:1;background:#f8fafc;border-radius:10px;padding:10px;text-align:center}
+.summary .box b{display:block;font-size:20px;color:var(--blue)}
+.summary .box span{font-size:11px;color:var(--gray)}
+.case-info p{font-size:13px;line-height:1.8;color:#334155}
+.case-info b{color:var(--ink)}
+.score-box{text-align:center;padding:10px 0}
+.score-box .big{font-size:36px;font-weight:700;color:var(--blue)}
+.filed{font-size:12px;color:var(--gray);line-height:1.7;margin-top:8px}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;margin:2px 3px 0 0}
+.pill.g{background:var(--green-light);color:var(--green)}
+.pill.r{background:var(--red-light);color:var(--red)}
+.pill.a{background:var(--amber-light);color:var(--amber)}
+.reset-bar{display:flex;gap:10px;margin-top:14px}
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:10px;font-size:13.5px;opacity:0;pointer-events:none;transition:.3s;z-index:99}
+.toast.show{opacity:1}
+
+/* ===== 流程分析 ===== */
+.dim-bars .bar-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.dim-bars .bar-name{width:70px;font-size:12px;color:#475569;flex-shrink:0}
+.dim-bars .bar-track{flex:1;height:8px;background:#eef2f7;border-radius:4px;overflow:hidden}
+.dim-bars .bar-fill{height:100%;border-radius:4px;transition:width .4s}
+.dim-bars .bar-val{width:34px;text-align:right;font-size:12px;font-weight:600}
+table.rpt{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+table.rpt th,table.rpt td{border:1px solid var(--border);padding:5px 7px;text-align:center;white-space:nowrap}
+table.rpt th{background:#f1f5f9;font-weight:600}
+table.rpt td.l{text-align:left;white-space:normal}
+.grade{display:inline-block;padding:4px 16px;border-radius:8px;font-weight:700;font-size:15px;color:#fff}
+.report h4{margin:14px 0 6px;font-size:14px;color:var(--ink)}
+.sugg{background:#f8fafc;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.9;color:#334155}
+.mini-stats{display:flex;gap:8px;flex-wrap:wrap}
+.mini-stats .ms{flex:1;min-width:70px;background:#f8fafc;border-radius:8px;padding:8px 6px;text-align:center}
+.mini-stats .ms b{display:block;font-size:16px}
+.mini-stats .ms span{font-size:11px;color:var(--gray)}
+.doc-link{cursor:pointer;color:var(--blue);text-decoration:underline dotted;padding:1px 3px;border-radius:4px}
+.doc-link:hover{background:var(--blue-light)}
+.doc-state{font-size:11px;padding:1px 6px;border-radius:8px;background:#f1f5f9;color:#94a3b8;white-space:nowrap}
+.doc-state.ok{background:var(--green-light);color:var(--green)}
+table.doc-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+table.doc-tbl th,table.doc-tbl td{border:1px solid var(--border);padding:4px 6px;text-align:center}
+table.doc-tbl th{background:#f1f5f9;font-weight:600}
+table.doc-tbl input{width:100%;border:none;background:transparent;font-size:12.5px;padding:2px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📋 采购预算审批流程模拟沙盘</h1>
+    <div class="sub">八环节全流程 · 角色扮演 · 驳回与调整 · 预算调整闭环 · 7套教学剧本</div>
+  </div>
+  <div class="badge">当前环节：<span id="curStepName">—</span></div>
+</header>
+
+<main>
+  <!-- 左侧：流程 -->
+  <div class="card">
+    <h2>审批流程 <span class="tag">点击已到达的环节可查看审核要点</span><button class="btn secondary" style="width:auto;padding:4px 12px;font-size:12px;margin-left:auto" onclick="showChecklist()">📖 审查要点全景表</button></h2>
+    <div class="flow" id="flow"></div>
+  </div>
+
+  <!-- 右侧 -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <h2>📊 演练概况</h2>
+      <div class="summary">
+        <div class="box"><b id="stRound">1</b><span>流转次数</span></div>
+        <div class="box"><b id="stReject" style="color:var(--red)">0</b><span>驳回次数</span></div>
+        <div class="box"><b id="stScore">100</b><span>流程分</span></div>
+      </div>
+      <div class="case-info" id="caseInfo"></div>
+      <div class="reset-bar">
+        <button class="btn primary" onclick="restart()">🔄 重新开始演练</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>🎬 操作台 <span class="tag" id="roleHint"></span></h2>
+      <div id="actionArea"><div class="hint">请先在下方选择演练模式开始。</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>📈 流程分析</h2>
+      <div class="mini-stats" id="miniStats"></div>
+      <div class="dim-bars" id="dimBars" style="margin-top:10px"></div>
+      <div id="liveTips" style="font-size:12.5px;color:#475569;line-height:1.7;margin-top:10px"></div>
+      <button class="btn secondary" style="margin-top:12px" onclick="showReport()">📋 生成完整分析报告</button>
+    </div>
+
+    <div class="card">
+      <h2>📜 流转记录</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</main>
+
+<!-- 弹窗 -->
+<div class="modal-mask" id="mask">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 环节定义 ============ */
+const STEPS = [
+  {name:"需求提出与预算测算", owner:"需求部门经办人", role:"经办人",
+   checks:"必要性：与年度经营计划/部门工作计划一致，非重复采购、未拆分规避招标；规格技术：品名、规格型号、数量、质量标准、交付时间与地点明确；金额合理性：单价依据（≥3家报价/历史成交价/市场价/第三方询价），成本构成完整（含税价、运费、安装调试、备件、维保、税费）；资金来源与支付计划；附件齐全：申请单、比价单、技术规格书、立项文件",
+   needForm:true},
+  {name:"部门负责人初审", owner:"需求部门负责人", role:"需求部门负责人",
+   checks:"是否必需、与年度计划一致；有无替代方案（库存/闲置资产调剂、租赁、修旧利废）；是否重复采购或拆分规避招标；是否在年度预算额度内"},
+  {name:"归口/采购部门审核", owner:"采购部", role:"采购专员",
+   checks:"库存是否有货；供应商资质、履约记录、关联交易与利益冲突；采购方式选择依据（公开招标/邀请招标/竞争性谈判/磋商/询价/单一来源/框架协议）是否充分，有无达到公开招标数额标准却化整为零；是否符合集中采购目录、限额标准与资产配置标准；价格合理性（成本构成、有无高估冒算或刻意压低）；是否在采购意向公开后30日内启动"},
+  {name:"财务预算审核", owner:"财务部", role:"财务专员",
+   checks:"预算科目是否正确；剩余额度；资金来源是否合法合规（专项资金不得挪用）；支付计划与现金流是否匹配；是否超预算（超预算须先走预算调整）"},
+  {name:"专业会签（按需）", owner:"技术/资产/法务/风控", role:"会签岗",
+   checks:"技术参数是否明确、有无指向性或变相圈定品牌；验收标准与验收方案；合同条款（预付款比例、进度款、质保金、违约责任、发票类型、付款节点）；政策落实（节能环保、国产化、中小企业预留份额，进口产品已获核准）；合规风险"},
+  {name:"分级授权审批", owner:"分管领导→总经理→董事会/总办会", role:"审批领导",
+   checks:"按金额与品类对照限额标准逐级终审；重大事项集体决策；复核采购方式与组织形式是否合规"},
+  {name:"批复下达与执行", owner:"财务/采购部", role:"执行岗",
+   checks:"形成《采购预算批复》或采购订单；按批复执行，不得擅自变更品名、数量、供应商、采购方式"},
+  {name:"验收、结算与归档", owner:"需求部门+仓库+财务", role:"验收岗",
+   checks:"按验收方案组织验收；验收单、发票、合同、预算调整批件（如有）齐套归档；按合同付款节点结算并核对发票类型；留痕备查不少于3–5年（固定资产更长）"}
+];
+
+/* 九维度审查要点全景对照（维度 → 要点 → 主要把关环节） */
+const CHECKLIST=[
+ ["需求必要性","与年度经营计划/部门工作计划一致；已有库存、闲置资产可调剂或维修复用；无重复采购、无拆分规避招标","①②③"],
+ ["规格与技术要求","品名、规格型号、数量、质量标准、交付时间与地点明确；技术参数无指向性、不变相圈定品牌","①⑤"],
+ ["预算金额合理性","单价依据充分（≥3家报价、历史成交价、市场价、第三方询价报告）；成本构成完整（含税价、运费、安装调试、备件、维保、税费）；无高估冒算或刻意压低","①③"],
+ ["资金来源与匹配度","有对应年度预算指标及剩余额度；资金来源合法合规（专项资金不得挪用）；匹配资金支付计划与现金流","①④"],
+ ["政策与标准合规","符合资产配置标准、集中采购目录与限额标准；落实节能、环保、国产化、中小企业预留份额等政策；进口产品已获核准","③⑤"],
+ ["采购方式与组织形式","公开招标/邀请招标/竞争性谈判/磋商/询价/单一来源/框架协议的选择依据充分；未化整为零规避公开招标","③⑥"],
+ ["供应商与风险","供应商资质与履约记录；关联交易、利益冲突审查；单一来源理由成立；履约风险与验收方案","③⑤"],
+ ["合同与付款条件","预付款比例、进度款、质保金、违约责任、发票类型、付款节点符合财务制度","⑤⑧"],
+ ["时限与附件完整性","申请单、比价单、技术规格书、立项文件、预算调整批件齐全；在采购意向公开后30日内启动","①③⑧"]
+];
+
+/* ============ 演练剧本 ============ */
+const SCENARIOS = [
+  { // 剧本A：标准流程
+    title:"剧本 A：常规办公设备采购",
+    desc:"信息部申请采购 <b>5台笔记本电脑</b>（预算 ¥40,000，在年度信息化预算额度内），需求真实、资料齐全、价格经过3家比价。各环节按规范推进即可通过。",
+    focus:"考验全流程规范操作",
+    corrupt:false, overBudget:false, prefill:{item:"笔记本电脑", qty:5, price:"8,000", budget:"信息化专项预算（剩余充足）", compare:"已附3家比价单（7,900 / 8,000 / 8,300 元）"}
+  },
+  { // 剧本B：需求不合理，应在②驳回
+    title:"剧本 B：非必需采购（应驳回）",
+    desc:"行政部申请采购 <b>2台高端咖啡机</b>（¥12,000）。公司有明确的办公设备配置标准，此类非办公必需品不在预算科目内，且仓库有闲置茶水间设备可调拨。<b>正确做法：环节②应驳回</b>，要求经办人调整或撤销申请。",
+    focus:"考验环节② 必要性把关",
+    corrupt:false, overBudget:false, wrong:true,
+    prefill:{item:"高端咖啡机", qty:2, price:"6,000", budget:"行政办公费（科目不符）", compare:"仅附1家报价（6,000元，未比价）"}
+  },
+  { // 剧本C：超预算，应在④触发预算调整
+    title:"剧本 C：超预算采购（考验环节④）",
+    desc:"生产部申请采购 <b>1台数控机床</b>（¥860,000），但设备购置预算仅剩 <b>¥500,000</b>。<b>正确做法：环节④财务审核发现超预算后应驳回</b>，先走预算调整程序，经⑥分级审批同意调增预算后，再重新提交。",
+    focus:"考验环节④ 预算额度闸口",
+    corrupt:false, overBudget:true,
+    prefill:{item:"数控机床", qty:1, price:"860,000", budget:"设备购置预算（剩余50万元）", compare:"已附3家比价（85万 / 86万 / 88万元）"}
+  },
+  { // 剧本D：拆分项目规避招标，应在③识别化整为零
+    title:"剧本 D：拆分项目规避招标（化整为零）",
+    desc:"行政部30天内第3次申请采购<b>监控摄像设备5套（¥500,000）</b>。此前已分两批批复同类设备7套（合计¥700,000）——三批累计<b>¥1,200,000</b>，已达到公开招标数额标准（¥1,000,000）。<b>正确做法：环节③应核对采购台账识别'化整为零'并驳回</b>，要求三批合并、依法公开招标。",
+    focus:"考验环节③ 化整为零识别",
+    corrupt:false, overBudget:false, split:true,
+    prefill:{item:"监控摄像设备", qty:5, price:"100,000", use:"园区安防升级（第三批）", budget:"安防专项预算（剩余充足）", compare:"已附3家比价（9.8万 / 10万 / 10.5万元/套）",
+      docs:{
+        cmp:{n1:'安防供应商A',p1:'98000',t1:'2周',n2:'安防供应商B',p2:'100000',t2:'1周',n3:'安防供应商C',p3:'105000',t3:'3周',c:'均为含税含安装调试价；推荐供应商B（价格居中、交期快）'},
+        spec:{param:'枪型红外摄像机、分辨率≥400万像素、防护等级IP66、支持ONVIF协议（通用参数，不指定品牌）',quality:'符合GB安防视频监控相关标准',accept:'安装调试后逐点位成像与联动验收'},
+        proj:{name:'园区安防升级项目（第三批）',base:'分批实施；未做整体立项与合并采购论证，各批金额均低于公开招标限额',appr:'行政主管',date:'2026-10-22'}
+      }}
+  },
+  { // 剧本E：单一来源理由不充分，应在③审核
+    title:"剧本 E：单一来源采购理由不充分（考验环节③）",
+    desc:"研发部申请以<b>单一来源</b>方式采购某品牌三维设计软件年度授权（¥600,000），理由仅是<b>'工程师已习惯该品牌操作、原代理商服务配合度高、更换软件影响项目进度'</b>——这些都不构成单一来源的法定情形（唯一供应商/专利保护/原厂授权且无替代）。<b>正确做法：环节③应驳回</b>，要求重新论证采购方式，改用竞争性方式采购。",
+    focus:"考验环节③ 单一来源审核",
+    corrupt:false, overBudget:false, soloSource:true,
+    weakReason:"工程师使用习惯＋原代理商服务配合度高（论证不充分）",
+    prefill:{item:"三维设计软件年度授权", qty:1, price:"600,000", use:"研发部产品结构设计", budget:"信息化专项预算（剩余充足）", compare:"单一来源报价600,000元，未开展询价比价",
+      docs:{
+        cmp:{n1:'X品牌授权代理商',p1:'600000',t1:'签约后3天',n2:'',p2:'',t2:'',n3:'',p3:'',t3:'',c:'仅获取单一来源报价，未开展询价比价，拟直接采用单一来源方式采购'},
+        spec:{param:'参数化建模、装配设计、工程图输出、支持主流数据格式兼容（功能需求，不指定品牌）',quality:'正版授权，含年度升级与原厂技术支持',accept:'安装激活并完成功能验证'},
+        proj:{name:'研发部设计工具年度保障计划',base:'列入研发部年度工作计划；未论证为何不能采用竞争性方式采购',appr:'研发主管',date:'2026-10-21'}
+      }}
+  },
+  { // 剧本F：技术规格书指向特定品牌，应在⑤会签拦截
+    title:"剧本 F：技术参数指向特定品牌（考验环节⑤）",
+    desc:"质检部申请采购<b>三坐标测量机1台（¥780,000）</b>。《技术规格书》由某供应商协助起草，埋入多项<b>倾向性参数</b>：测量精度≤0.8μm、须兼容<b>B品牌专用测头系统</b>、软件须为<b>B品牌同源内核</b>——市面仅B品牌能全部满足，构成变相圈定品牌。<b>正确做法：环节⑤会签岗应识别指向性参数并驳回</b>，要求修订为通用参数后重新提交。",
+    focus:"考验环节⑤ 会签参数审查",
+    corrupt:false, overBudget:false, specPoint:true,
+    specPoison:"测量精度≤0.8μm、须兼容B品牌专用测头接口、软件须为B品牌同源内核（三项叠加后仅B品牌全部满足，构成变相圈定品牌）",
+    prefill:{item:"三坐标测量机", qty:1, price:"780,000", use:"质检中心精密检测", budget:"质检设备专项预算（剩余充足）", compare:"已附3家比价（76万 / 78万 / 81万元）",
+      docs:{
+        cmp:{n1:'B品牌授权代理商',p1:'780000',t1:'60天',n2:'C品牌代理',p2:'760000',t2:'45天',n3:'D品牌代理',p3:'810000',t3:'50天',c:'均为含税含安装培训价；受规格书参数限制推荐B品牌'},
+        proj:{name:'质检中心检测能力提升项目',base:'列入质检中心年度建设计划；技术规格书由拟投标供应商协助起草',appr:'质检负责人',date:'2026-10-19'}
+      }}
+  },
+  { // 剧本G：超预算+预算调整完整闭环
+    title:"剧本 G：预算调整流程完整闭环（考验环节④+①）",
+    desc:"制造部申请采购<b>注塑机2台（¥960,000）</b>，设备购置预算仅剩<b>¥600,000</b>。本剧本要求完整走通预算调整闭环：<b>④财务审核打回 → ①经办人提交《预算调整申请》 → 财务复核 → 分管领导/总办会审批调增 → 批件下达 → 携批件重新提交 → ④复核批件后放行</b>，再完成后续采购流程。",
+    focus:"考验环节④+① 预算调整闭环",
+    corrupt:false, overBudget:true, budgetLoop:true,
+    prefill:{item:"注塑机", qty:2, price:"480,000", use:"二期产线扩产", budget:"设备购置预算（剩余60万元）", compare:"已附3家比价（95万 / 96万 / 98万元）",
+      docs:{
+        cmp:{n1:'海天机械',p1:'950000',t1:'50天',n2:'震雄集团',p2:'960000',t2:'40天',n3:'伊之密',p3:'980000',t3:'35天',c:'均为含税含安装调试价；推荐震雄集团（价格与交期均衡）'},
+        spec:{param:'锁模力≥3200kN、注塑量≥800g、伺服节能驱动系统（通用参数，不指定品牌）',quality:'符合GB/T注塑机相关标准',accept:'安装调试验收＋试模验证'},
+        proj:{name:'二期产线扩产技改项目（设备采购包）',base:'依据总经理办公会批准的《二期扩产立项报告》（2026-03）；测算总额超出现有预算，需同步申请预算调整',appr:'总经理办公会',date:'2026-09-15'}
+      }}
+  }
+];
+
+/* ============ 状态 ============ */
+let S = null;
+function freshState(){
+  return {scenario:0, cur:0, visited:[0], status:STEPS.map(()=>null), // null|'done'|'reject'
+    round:1, rejects:0, score:100, log:[], req:null, budgetFixed:false, ended:false, result:null,
+    stepStats:STEPS.map(()=>({visits:0,pass:0,rejFrom:0,rejTo:0,err:0,good:0})),
+    events:[], rejectsMade:[], cancelled:false, report:null, attachWarns:0, signWarn:0,
+    splitFixed:false, soloFixed:false, specFixed:false, adjustedBudget:null,
+    docs:{}, docsFilled:{req:false,cmp:false,spec:false,proj:false}};
+}
+
+/* ============ 渲染 ============ */
+let FORM_DRAFT=null; // 环节①主表单草稿（打开附件编辑/校验失败重渲染时保护已填内容）
+function attrEsc(v){return String(v??'').replace(/"/g,'&quot;')}
+function captureDraft(){
+  if(S.cur!==0||S.req)return;
+  const el=document.getElementById.bind(document);
+  if(!el('fItem'))return;
+  FORM_DRAFT={item:el('fItem').value,qty:el('fQty').value,price:el('fPrice').value,compare:el('fCompare').value,eta:el('fEta').value,
+    att:[1,2,3,4].map(i=>!!(el('att'+i)&&el('att'+i).checked))};
+}
+function render(){
+  // 流程图
+  const flow = document.getElementById('flow');
+  flow.innerHTML = STEPS.map((s,i)=>{
+    let cls='', mark=i+1;
+    if(S.status[i]==='done'){cls='done';mark='✓';}
+    else if(S.status[i]==='reject'){cls='rejected';mark='✕';}
+    else if(i===S.cur && !S.ended){cls='active';}
+    const lineCls = i<7 && (S.status[i]==='done') ? 'done':'';
+    const reach = S.visited.includes(i);
+    return `<div class="step ${i===S.cur&&!S.ended?'current':''}">
+      <div class="rail"><div class="dot ${cls}" onclick="${reach?`showStepDetail(${i})`:''}" style="${reach?'':'opacity:.5;cursor:default'}">${mark}</div>
+      ${i<7?`<div class="line ${lineCls}"></div>`:''}</div>
+      <div class="body">
+        <div class="title">${s.name}</div>
+        <div class="owner">责任主体：${s.owner}</div>
+        ${reach?`<div class="checks">审核要点：${s.checks}</div>`:''}
+        ${i===S.cur&&!S.ended?`<div class="hint">📍 当前环节 — 请在右侧操作台处理</div>`:''}
+      </div></div>`;
+  }).join('');
+  document.getElementById('curStepName').textContent = S.ended? (S.result.pass?'已批复归档 ✅':'流程终止 ⛔') : `①${'①②③④⑤⑥⑦⑧'[S.cur]} ${STEPS[S.cur].name}`;
+  document.getElementById('stRound').textContent=S.round;
+  document.getElementById('stReject').textContent=S.rejects;
+  document.getElementById('stScore').textContent=Math.max(0,S.score);
+  document.getElementById('caseInfo').innerHTML = `<div style="background:var(--amber-light);border-radius:10px;padding:12px;margin-bottom:8px"><b style="color:var(--amber)">🎭 ${SCENARIOS[S.scenario].title}</b> <span class="pill a" style="vertical-align:2px">${SCENARIOS[S.scenario].focus||''}</span><p style="font-size:12.5px;line-height:1.7;margin-top:6px">${SCENARIOS[S.scenario].desc}</p></div>
+    ${S.req?`<div class="filed"><b>当前申请单：</b>${S.req.item} × ${S.req.qty}，预估总价 <b>¥${(parseNum(S.req.price)*S.req.qty).toLocaleString()}</b><br>预算：${S.req.budget}<br>比价：${S.req.compare}</div>`:''}`;
+  renderActions();
+  renderLog();
+  renderAnalysis();
+}
+
+function parseNum(s){return parseFloat(String(s).replace(/[^0-9.]/g,''))||0}
+
+function renderActions(){
+  const area=document.getElementById('actionArea');
+  if(S.ended){
+    area.innerHTML = S.result.pass
+      ? `<div class="score-box"><div class="big">${Math.max(0,S.score)}</div><div style="color:var(--gray);font-size:13px">最终流程分</div></div>
+         <p style="font-size:13px;line-height:1.8;color:#334155">${S.result.msg}</p>
+         <div style="margin-top:10px">${S.result.pills}</div>
+         <div class="actions">
+           <button class="btn primary" onclick="showReport()">📋 查看流程分析报告</button>
+           <button class="btn secondary" onclick="pickScenario()">🔄 开始新剧本演练</button>
+         </div>`
+      : `<p style="font-size:13px;line-height:1.8;color:#334155">${S.result.msg}</p>
+         <div class="actions">
+           <button class="btn primary" onclick="showReport()">📋 查看流程分析报告</button>
+           <button class="btn secondary" onclick="pickScenario()">🔄 重新选择剧本</button>
+         </div>`;
+    document.getElementById('roleHint').textContent='';
+    return;
+  }
+  const st=STEPS[S.cur];
+  document.getElementById('roleHint').textContent='你正在扮演：'+st.role;
+  if(S.cur===0){
+    const p=SCENARIOS[S.scenario].prefill;
+    const r=S.req;
+    const d=(!r&&FORM_DRAFT)?FORM_DRAFT:null;
+    area.innerHTML=`
+      <label>采购品名</label><input id="fItem" value="${attrEsc(r?r.item:(d?d.item:p.item))}">
+      <label>规格数量</label><input id="fQty" type="number" min="1" value="${attrEsc(r?r.qty:(d?d.qty:p.qty))}">
+      <label>预估单价（元）</label><input id="fPrice" value="${attrEsc(r?r.price:(d?d.price:p.price))}">
+      <label>用途说明</label><input id="fUse" value="${attrEsc(r?r.use:(p.use||(S.scenario===1?'员工休闲区布置':S.scenario===2?'产线扩产':'开发测试用机')))}" ${r?'disabled':''}>
+      <label>预算科目 / 额度</label><input id="fBudget" value="${attrEsc(r?r.budget:((S.budgetFixed&&S.adjustedBudget)?S.adjustedBudget:(d?d.budget:p.budget)))}" ${(r||(S.budgetFixed&&S.adjustedBudget))?'disabled':''}>
+      <label>比价依据（≥3家或历史成交价）</label><input id="fCompare" value="${attrEsc(r?r.compare:(d?d.compare:p.compare))}">
+      <label>期望到货期</label><input id="fEta" value="${attrEsc(r?r.eta:(d?d.eta:'2周内'))}">
+      <label>随单附件（时限与附件完整性）<span style="font-weight:400;color:#94a3b8;font-size:11px;margin-left:6px">💡 点击附件名称打开模板编辑页，填写保存后自动附上</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:#334155;padding:2px 0 6px;align-items:center">
+        ${Object.entries(DOC_TEMPLATES).map(([k,t])=>`
+        <label style="margin:0;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="att${t.n}" ${(FORM_DRAFT?FORM_DRAFT.att[t.n-1]:((t.n<=2||S.scenario===0)||(SCENARIOS[S.scenario].specPoint&&t.n===3)))?'checked':''}>
+          <span class="doc-link" onclick="openDocEditor('${k}')" title="点击打开模板编辑页">📄 ${t.name}</span>
+          <span class="doc-state ${S.docsFilled[k]?'ok':''}" id="docState-${k}">${S.docsFilled[k]?'已填写 ✓':'未填写'}</span>
+        </label>`).join('')}
+      </div>
+      ${SCENARIOS[S.scenario].budgetLoop&&!S.budgetFixed&&S.stepStats[0].rejTo>0?`<div style="background:var(--red-light);border-radius:8px;padding:8px 10px;font-size:12.5px;color:#7f1d1d;line-height:1.7">💰 本单超预算：请先点击下方"提交《预算调整申请》"完成调整闭环（财务复核 → 领导审批 → 批件下达），再重新提交采购申请。</div>`:''}
+      <div class="actions">
+        ${SCENARIOS[S.scenario].budgetLoop&&!S.budgetFixed&&S.stepStats[0].rejTo>0?'<button class="btn secondary" onclick="openBudgetAdjustReq()">📝 提交《预算调整申请》（预算调整闭环）</button>':''}
+        <button class="btn primary" onclick="submitReq()">提交申请（进入环节②）</button>
+        ${S.stepStats[0].rejTo>0?'<button class="btn reject" onclick="cancelReq()">🗑 撤销申请（终止流程）</button>':''}
+      </div>`;
+  }else{
+    let extra='';
+    if(S.cur===2){ // 采购方式与组织形式（九维度之六）
+      const sc=SCENARIOS[S.scenario];
+      if(sc.split){
+        extra+=`<div style="background:var(--red-light);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.8;color:#7f1d1d"><b>📋 采购台账核查（近90天同类采购）</b><br>· 09-28 监控摄像设备 3套 ¥300,000（已批复）<br>· 10-15 监控摄像设备 4套 ¥400,000（已批复）<br>· 本单　 监控摄像设备 5套 ¥500,000（待审）<br><b>三批累计 12套 / ¥1,200,000 ≥ 公开招标数额标准 ¥1,000,000</b> —— 涉嫌化整为零规避公开招标</div>`;
+      }
+      extra+=`<label>采购方式建议（选择依据须充分）</label>
+      <select id="pmMethod">
+        <option${sc.soloSource?'':' selected'}>公开招标</option><option>邀请招标</option><option>竞争性谈判</option><option>竞争性磋商</option>
+        <option>询价</option><option value="单一来源"${sc.soloSource?' selected':''}>单一来源</option><option>框架协议</option>
+      </select>
+      <input id="pmReason" value="${sc.soloSource?attrEsc(sc.weakReason):''}" placeholder="选择依据（选单一来源/框架协议时必填：如唯一供应商、原厂授权等）" style="margin-top:6px">`;
+    }
+    if(S.cur===4){ // 会签确认项：技术/合同/政策/验收
+      const sc=SCENARIOS[S.scenario];
+      if(sc.specPoint){
+        const specParam=(S.docs.spec&&S.docs.spec.data.param)||sc.specPoison;
+        extra+=`<div style="background:var(--amber-light);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.8;color:#78350f"><b>📄 《技术规格书》参数摘录（会签前必读）</b><br>${specParam}</div>`;
+      }
+      extra+=`<label>会签确认项（逐项核对后勾选，对应"规格技术/合同付款/政策合规/供应商与验收"维度）</label>
+      <div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:#334155;padding:2px 0 6px">
+        <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs1"> 技术参数明确，无指向性、未变相圈定品牌</label>
+        <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs2"> 合同条款合规：预付款比例、质保金、违约责任、发票类型、付款节点</label>
+        <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs3"> 政策落实：节能环保、国产化、中小企业预留，进口产品已获核准（如涉及）</label>
+        <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cs4"> 验收标准与验收方案明确，供应商履约风险已评估</label>
+      </div>`;
+    }
+    area.innerHTML=`
+      <div style="font-size:12.5px;color:var(--gray);background:#f8fafc;border-radius:8px;padding:10px;line-height:1.7">
+      <b style="color:var(--ink)">你的职责：</b>${st.checks.length>110?st.checks.slice(0,110)+'…（点击左侧环节圆点查看全部要点）':st.checks}</div>
+      ${extra}
+      ${S.cur===3&&SCENARIOS[S.scenario].budgetLoop&&!S.budgetFixed?`<div style="background:var(--red-light);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.8;color:#7f1d1d">💰 本单超出设备购置预算剩余额度 <b>¥360,000</b>。预算调整须完整闭环：<b>驳回至环节① → 经办人提交《预算调整申请》 → 财务复核 → 分管领导/总办会审批 → 批件下达</b>，随后携批件重新流转。请使用"驳回"退回环节①。</div>`:''}
+      <div class="actions">
+        <button class="btn approve" onclick="approve()">✔ 审核通过，流转下一环节</button>
+        <button class="btn reject" onclick="openReject()">✕ 驳回（退回指定环节修改）</button>
+        ${S.cur===3&&SCENARIOS[S.scenario].overBudget&&!SCENARIOS[S.scenario].budgetLoop?'<button class="btn secondary" onclick="budgetAdjust()">💰 发起预算调整程序</button>':''}
+      </div>`;
+  }
+}
+
+function renderLog(){
+  document.getElementById('log').innerHTML = S.log.length? S.log.map(l=>`<div class="log-item ${l.type}"><span class="t">${l.time} · 环节${l.step>=0?'①②③④⑤⑥⑦⑧'[l.step]:'—'}</span><br>${l.text}</div>`).reverse().join('')
+    : '<div style="color:var(--gray);font-size:12px">暂无记录</div>';
+}
+
+/* ============ 交互 ============ */
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function now(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`}
+function addLog(type,step,text){S.log.push({type,step,time:now(),text})}
+function visit(i){S.stepStats[i].visits++; if(!S.visited.includes(i))S.visited.push(i);}
+
+function pickScenario(){
+  S=freshState();
+  const mask=document.getElementById('mask'), m=document.getElementById('modal');
+  m.innerHTML=`<h3>🎭 选择演练剧本</h3>
+    ${SCENARIOS.map((s,i)=>`<div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;cursor:pointer" onclick="startScenario(${i})">
+      <b style="color:var(--blue)">${s.title}</b> ${s.focus?`<span class="pill a">${s.focus}</span>`:''}<p style="font-size:12.5px;line-height:1.7;color:#475569;margin-top:6px">${s.desc.replace(/<[^>]+>/g,'')}</p></div>`).join('')}
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">关闭</button></div>`;
+  mask.classList.add('show');
+}
+function startScenario(i){S=freshState();FORM_DRAFT=null;S.scenario=i;closeModal();visit(0);addLog('info',-1,`演练开始：${SCENARIOS[i].title}`);render();toast('演练开始！你当前是环节① 经办人')}
+
+function closeModal(){document.getElementById('mask').classList.remove('show')}
+
+function showStepDetail(i){
+  const s=STEPS[i];
+  document.getElementById('modal').innerHTML=`<h3>${'①②③④⑤⑥⑦⑧'[i]} ${s.name}</h3>
+    <p style="font-size:13px;color:#475569;line-height:1.8"><b>责任主体：</b>${s.owner}<br><b>审查要点：</b><br>${s.checks.split('；').join('；<br>')}</p>
+    ${S.status[i]==='reject'?'<p style="color:var(--red);font-size:12.5px;margin-top:8px">⚠ 该环节曾驳回过本申请</p>':''}
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">关闭</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+
+/* 九维度审查要点全景对照表 */
+function showChecklist(){
+  document.getElementById('modal').innerHTML=`
+    <h3>📖 采购预算审查要点全景对照表</h3>
+    <p style="font-size:12.5px;color:#64748b;line-height:1.7;margin:8px 0">九大审查维度贯穿八个审批环节，每个维度由一个或多个环节把关。演练中各环节的操作要点均由此表派生。</p>
+    <div style="overflow-x:auto"><table class="rpt" style="font-size:12px">
+      <tr><th style="width:110px">维度</th><th>具体审查要点</th><th style="width:86px">把关环节</th></tr>
+      ${CHECKLIST.map(([dim,pts,steps])=>`<tr>
+        <td class="l" style="font-weight:600;color:var(--blue)">${dim}</td>
+        <td class="l" style="text-align:left;white-space:normal;line-height:1.7">${pts}</td>
+        <td>${steps.split('').map(c=>`<span class="pill a">${c}</span>`).join(' ')}</td>
+      </tr>`).join('')}
+    </table></div>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">关闭</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+
+/* ============ 附件材料模板编辑 ============ */
+const DOC_TEMPLATES={
+  req:{n:1,name:'采购申请单',desc:'采购需求的正式载体：品名规格、数量、预算与用途等要素齐全，与年度计划一致。'},
+  cmp:{n:2,name:'采购比价单',desc:'单价依据载体：须≥3家报价或历史成交价，注明含税/含运费与交期，避免单一来源无依据。'},
+  spec:{n:3,name:'技术规格书',desc:'规格技术载体：技术参数用通用描述，不得具有指向性或变相圈定品牌；须含质量标准与验收标准。'},
+  proj:{n:4,name:'立项/计划文件',desc:'必要性载体：对应年度经营/部门工作计划的具体条目，写明立项依据与批准情况。'}
+};
+
+/* 按剧本与申请单预填模板内容（首次打开时） */
+function docPrefill(key){
+  if(S.docs[key])return S.docs[key].data; // 已保存过则回显
+  const scn=S.scenario,p=SCENARIOS[scn].prefill,r=S.req,sc=SCENARIOS[scn];
+  const item=r?r.item:p.item,qty=r?r.qty:p.qty,price=r?r.price:p.price;
+  const use=r?r.use:(p.use||(scn===1?'员工休闲区布置':scn===2?'产线扩产':'开发测试用机'));
+  const budget=r?r.budget:((S.budgetFixed&&S.adjustedBudget)?S.adjustedBudget:p.budget),eta=r?r.eta:'2周内';
+  if(key==='req')return {dept:'需求部门（经办人）',item,spec:'详见《技术规格书》',qty,budget,use,eta};
+  if(key==='cmp'){
+    if(p.docs&&p.docs.cmp)return p.docs.cmp;
+    return scn===0
+      ? {n1:'联想授权店',p1:'7900',t1:'1周',n2:'京东自营',p2:'8000',t2:'3天',n3:'国美电器',p3:'8300',t3:'1周',c:'以上均为含税含运费价；推荐京东自营（价格次低、交期最快）'}
+      : scn===1
+      ? {n1:'某咖啡设备商',p1:'6000',t1:'2周',n2:'',p2:'',t2:'',n3:'',p3:'',t3:'',c:'仅获取到1家报价，未充分比价'}
+      : {n1:'华东机床厂',p1:'850000',t1:'45天',n2:'南方精密设备',p2:'860000',t2:'30天',n3:'进口代理商（德系）',p3:'880000',t3:'60天',c:'均为含税含安装调试价；推荐南方精密（价格与交期均衡）'};
+  }
+  if(key==='spec'){
+    if(p.docs&&p.docs.spec)return p.docs.spec;
+    if(sc.specPoint)return S.specFixed
+      ? {param:'测量精度≤1.0μm、测头接口采用国际通用标准接口、软件提供开放二次开发接口（通用参数，不限定品牌）',quality:'符合ISO 10360坐标测量机精度检验标准',accept:'第三方精度检测＋试件测量验证'}
+      : {param:sc.specPoison,quality:'符合ISO 10360坐标测量机精度检验标准',accept:'按供应商方案现场验收'};
+    return scn===0
+      ? {param:'CPU≥i5、内存≥16G、固态硬盘≥512G、14英寸屏幕（通用参数，不指定品牌型号）',quality:'全新原装，通过3C认证',accept:'开箱验机、开机测试、序列号登记入库'}
+      : scn===1
+      ? {param:'全自动、带磨豆功能、可制作意式浓缩（未约定产能、功率等关键参数）',quality:'未明确',accept:'未明确'}
+      : {param:'加工直径≥φ400mm、定位精度±0.005mm、三轴联动（通用参数，不指定品牌）',quality:'符合GB机床精度检验标准',accept:'第三方精度检测报告＋试件加工验证'};
+  }
+  if(p.docs&&p.docs.proj)return p.docs.proj;
+  return scn===0
+    ? {name:'开发部2026年度设备更新计划（第3批）',base:'已列入《年度经营计划》信息化专项；现用5台设备超期服役、维修成本上升',appr:'部门负责人 王XX',date:'2026-10-20'}
+    : scn===1
+    ? {name:'员工休闲区氛围提升项目',base:'行政部年度活动预算附件；未做立项论证与必要性分析',appr:'行政主管 李XX',date:'2026-10-21'}
+    : {name:'二期产线扩产技改项目',base:'依据总经理办公会批准的《二期扩产立项报告》（2026-03）',appr:'总经理办公会',date:'2026-09-15'};
+}
+
+function openDocEditor(key){
+  captureDraft();
+  const d=DOC_TEMPLATES[key],data=docPrefill(key);
+  const esc=v=>String(v??'').replace(/"/g,'&quot;');
+  let body='';
+  if(key==='req'){
+    body=`<label>申请部门 / 经办人</label><input id="dr_dept" value="${esc(data.dept)}">
+      <label>采购品名</label><input id="dr_item" value="${esc(data.item)}">
+      <label>规格型号</label><input id="dr_spec" value="${esc(data.spec)}">
+      <label>数量</label><input id="dr_qty" value="${esc(data.qty)}">
+      <label>预算金额</label><input id="dr_budget" value="${esc(data.budget)}">
+      <label>采购原因 / 用途</label><input id="dr_use" value="${esc(data.use)}">
+      <label>期望到货期</label><input id="dr_eta" value="${esc(data.eta)}">`;
+  }else if(key==='cmp'){
+    body=`<table class="doc-tbl"><tr><th style="width:40%">供应商</th><th>报价（元）</th><th>交期</th></tr>
+      ${[1,2,3].map(i=>`<tr><td><input id="dc_n${i}" value="${esc(data['n'+i])}" placeholder="供应商${i}"></td>
+        <td><input id="dc_p${i}" value="${esc(data['p'+i])}" placeholder="报价"></td>
+        <td><input id="dc_t${i}" value="${esc(data['t'+i])}" placeholder="交期"></td></tr>`).join('')}</table>
+      <label>比价结论（推荐供应商及理由，注明是否含税/含运费）</label>
+      <textarea id="dc_c" placeholder="例如：三家均为含税含运费价，推荐B供应商（价格次低、交期最快）…">${esc(data.c)}</textarea>`;
+  }else if(key==='spec'){
+    body=`<label>技术参数要求（通用描述，不得指向特定品牌）</label>
+      <textarea id="ds_param" placeholder="例如：内存≥16G、加工直径≥φ400mm…">${esc(data.param)}</textarea>
+      <label>质量标准</label><input id="ds_q" value="${esc(data.quality)}">
+      <label>验收标准</label><input id="ds_a" value="${esc(data.accept)}">`;
+  }else{
+    body=`<label>项目 / 计划名称</label><input id="dp_name" value="${esc(data.name)}">
+      <label>立项依据（对应年度经营/部门工作计划条目）</label>
+      <textarea id="dp_base" placeholder="例如：列入年度信息化专项；现有设备超期服役…">${esc(data.base)}</textarea>
+      <label>批准人 / 批准会议</label><input id="dp_appr" value="${esc(data.appr)}">
+      <label>批准日期</label><input id="dp_date" value="${esc(data.date)}">`;
+  }
+  document.getElementById('modal').innerHTML=`<h3>📄 材料编辑 — ${d.name}（模板）</h3>
+    <p style="font-size:12px;color:#64748b;background:#f8fafc;border-radius:8px;padding:8px 10px;line-height:1.7;margin:8px 0">${d.desc}</p>
+    ${body}
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">取消</button><button class="btn primary" onclick="saveDoc('${key}')">💾 保存并附加到申请</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+
+function saveDoc(key){
+  const el=document.getElementById.bind(document);
+  const v=id=>{const e=el(id);return e?e.value.trim():''};
+  let data={},summary='';
+  if(key==='req'){
+    data={dept:v('dr_dept'),item:v('dr_item'),spec:v('dr_spec'),qty:v('dr_qty'),budget:v('dr_budget'),use:v('dr_use'),eta:v('dr_eta')};
+    if(!data.item||!data.qty){toast('⚠ 申请单的品名与数量为必填项');return;}
+    summary=`采购申请单：${data.item}×${data.qty}，预算${data.budget}`;
+  }else if(key==='cmp'){
+    data={n1:v('dc_n1'),p1:v('dc_p1'),t1:v('dc_t1'),n2:v('dc_n2'),p2:v('dc_p2'),t2:v('dc_t2'),n3:v('dc_n3'),p3:v('dc_p3'),t3:v('dc_t3'),c:v('dc_c')};
+    const filled=[1,2,3].filter(i=>data['n'+i]&&data['p'+i]).length;
+    if(filled===0){toast('⚠ 请至少填写1家供应商及报价');return;}
+    if(filled<3)S.events.push({type:'warn',text:`《采购比价单》仅${filled}家有效报价，不满足"≥3家比价"要求（环节①至③均可据此驳回）`});
+    summary=`比价单（${filled}家）：`+[1,2,3].filter(i=>data['n'+i]).map(i=>`${data['n'+i]} ¥${data['p'+i]}`).join(' / ');
+  }else if(key==='spec'){
+    data={param:v('ds_param'),quality:v('ds_q'),accept:v('ds_a')};
+    if(!data.param){toast('⚠ 技术参数要求为必填项');return;}
+    summary=`技术规格书：参数/质量/验收标准${data.quality&&data.accept?'齐全':'未填全'}`;
+  }else{
+    data={name:v('dp_name'),base:v('dp_base'),appr:v('dp_appr'),date:v('dp_date')};
+    if(!data.name){toast('⚠ 项目名称为必填项');return;}
+    summary=`立项文件：${data.name}`;
+  }
+  S.docs[key]={data,summary};
+  const first=!S.docsFilled[key];
+  S.docsFilled[key]=true;
+  const cb=el('att'+DOC_TEMPLATES[key].n);
+  if(cb)cb.checked=true;
+  const st=el('docState-'+key);
+  if(st){st.textContent='已填写 ✓';st.classList.add('ok');}
+  closeModal();
+  addLog('info',0,`${first?'填写':'更新'}并附加《${DOC_TEMPLATES[key].name}》：${summary}`);
+  if(key==='spec'&&SCENARIOS[S.scenario].specPoint&&S.specFixed)
+    S.events.push({type:'good',text:'经办人修订《技术规格书》：删除指向性参数，改为通用技术描述'});
+  render();
+  toast(`✅ 《${DOC_TEMPLATES[key].name}》已保存并附加到申请`);
+}
+
+/* 环节①提交 */
+function submitReq(){
+  captureDraft();
+  const item=document.getElementById('fItem').value.trim();
+  const qty=parseInt(document.getElementById('fQty').value)||0;
+  const price=document.getElementById('fPrice').value.trim();
+  const use=document.getElementById('fUse').value.trim();
+  const eta=document.getElementById('fEta').value.trim();
+  let err='';
+  if(!item||qty<1||!price) err='品名、数量、单价为必填项';
+  else if(!document.getElementById('fCompare').value.trim()||!/\d/.test(document.getElementById('fCompare').value)) err='必须附≥3家比价或历史成交价依据';
+  else if(!document.getElementById('att1').checked||!document.getElementById('att2').checked) err='申请单、比价单为必备附件，缺一不可';
+  if(err){toast('⚠ '+err);S.score-=5;render();return}
+  // 附件完整性软校验（时限与附件完整性维度）
+  if(!document.getElementById('att3').checked){S.attachWarns++;S.score-=4;S.events.push({type:'warn',text:'环节①缺少技术规格书——规格与技术要求依据不足（-4分）'});}
+  if(!document.getElementById('att4').checked){S.attachWarns++;S.score-=2;S.events.push({type:'warn',text:'环节①缺少立项/计划文件——必要性与年度计划一致性依据不足（-2分）'});}
+  // 已勾选但未通过模板填写内容的附件，给出留痕提示
+  Object.entries(DOC_TEMPLATES).forEach(([k,t])=>{
+    if(document.getElementById('att'+t.n).checked&&!S.docsFilled[k])
+      S.events.push({type:'info',text:`附件《${t.name}》已勾选但未填写模板内容，建议补充完整以备后续环节审查`});
+  });
+  S.req={item,qty,price,use,eta,
+    budget:document.getElementById('fBudget').value.trim(),
+    compare:document.getElementById('fCompare').value.trim()};
+  FORM_DRAFT=null;
+  S.status[0]='done';
+  S.stepStats[0].pass++;
+  addLog('approve',0,`经办人提交申请：${item}×${qty}，总价¥${(parseNum(price)*qty).toLocaleString()}`);
+  S.events.push({type:'info',text:`环节①提交申请单（第 ${S.stepStats[0].pass} 次提交）`});
+  S.cur=1;visit(1);S.round++;render();toast('申请已提交，进入部门负责人初审');
+}
+
+/* 撤销申请（非必需采购的合规终点） */
+function cancelReq(){
+  S.cancelled=true;S.ended=true;S.score+=10;
+  S.events.push({type:'good',text:'经办人主动撤销申请——事前控制，把不合理支出挡在预算批复之前'});
+  S.result={pass:false,cancelled:true,msg:'申请已撤销：经办人主动撤回采购申请，流程合规终止。<br><br>这正是"事前控制"的价值——不合理或暂时无法合规落地的支出，应在预算批复之前被拦下。'};
+  addLog('info',0,'经办人撤销采购申请，流程合规终止');
+  render();
+}
+
+/* 通过 */
+function approve(){
+  const i=S.cur;
+  const scn=SCENARIOS[S.scenario];
+  const st=S.stepStats[i];
+  // 环节③：采购方式建议（采购方式与组织形式维度）
+  if(i===2){
+    const el=document.getElementById.bind(document);
+    const method=el('pmMethod')?el('pmMethod').value:'';
+    const reason=el('pmReason')?el('pmReason').value.trim():'';
+    if(method==='单一来源'&&!reason){toast('⚠ 单一来源采购必须说明理由（唯一供应商、原厂授权、专利保护等）并留档');return;}
+    if(method==='框架协议'&&!reason){toast('⚠ 框架协议采购须说明适用情形与协议期内预估总量');return;}
+    if(S.req){S.req.method=method+(reason?`（依据：${reason}）`:'');}
+    addLog('info',2,`采购方式建议：${method}${reason?'，依据：'+reason:''}`);
+    S.events.push({type:'info',text:`环节③建议采购方式：${method}${reason?'（已说明依据）':'（未说明依据，建议补充留档）'}`});
+    if(!reason)S.score-=2;
+  }
+  // 环节⑤：会签确认项（规格技术/合同付款/政策合规/供应商与验收）
+  if(i===4){
+    const el=document.getElementById.bind(document);
+    const checked=['cs1','cs2','cs3','cs4'].filter(id=>el(id)&&el(id).checked).length;
+    if(checked===0){toast('⚠ 请先逐项核对会签确认项（技术参数、合同条款、政策落实、验收方案）再通过');return;}
+    if(checked<4){S.signWarn+=(4-checked);S.score-=2*(4-checked);S.events.push({type:'warn',text:`环节⑤会签仅确认 ${checked}/4 项——会签流于形式，存在合规盲区（-${2*(4-checked)}分）`});}
+    else{S.events.push({type:'good',text:'环节⑤四项会签确认全部完成（技术/合同/政策/验收）'});st.good++;S.score+=5;}
+  }
+  st.pass++;
+  // 教学判定：不该通过的通过 → 扣分并记录事件
+  let warn='';
+  if(scn.wrong && i===1){ warn='❌ 环节②这是非必需采购（有闲置设备可调拨），不应通过！扣20分'; S.score-=20; st.err++; S.events.push({type:'err',text:'环节②对非必需采购误判通过（关键闸口失守）'}); }
+  if(scn.wrong && i>=2 && i<=6){ warn='⚠ 非必需采购流转至此仍未被拦截！各环节均有把关责任，扣10分'; S.score-=10; st.err++; S.events.push({type:'err',text:`环节${'①②③④⑤⑥⑦⑧'[i]}未拦截非必需采购（把关失守）`}); }
+  if(scn.overBudget && i===3 && !S.budgetFixed){ warn='❌ 环节④发现超预算 ¥360,000，未走预算调整不得通过！扣20分'; S.score-=20; st.err++; S.events.push({type:'err',text:'环节④对超预算申请误判通过（关键闸口失守）'}); }
+  if(scn.overBudget && i>3 && !S.budgetFixed && S.status[3]!=='reject'){ warn='❌ 超预算未经调整即流转！扣15分'; S.score-=15; st.err++; S.events.push({type:'err',text:'超预算未经调整即进入后续环节'}); }
+  if(scn.overBudget && i===3 && S.budgetFixed){ S.events.push({type:'good',text:'环节④在预算调整完成后审核放行，处理规范'}); st.good++; }
+  // 剧本D：拆分项目规避招标（环节③采购台账为关键闸口）
+  if(scn.split){
+    if(i===2&&!S.splitFixed){ warn='❌ 环节③近90天同类采购已累计¥1,200,000（≥公开招标限额100万元），本单属"化整为零"规避招标，应驳回并要求三批合并公开招标！扣20分'; S.score-=20; st.err++; S.events.push({type:'err',text:'环节③未识别化整为零规避招标（关键闸口失守）'}); }
+    else if(i>2&&i<=6&&!S.splitFixed){ warn='⚠ 化整为零规避招标未被拦截，带病流转至此！扣10分'; S.score-=10; st.err++; S.events.push({type:'err',text:`环节${'①②③④⑤⑥⑦⑧'[i]}未拦截化整为零规避招标（把关失守）`}); }
+    else if(i===2&&S.splitFixed){ S.events.push({type:'good',text:'环节③在合并整改完成后审核放行，处理规范'}); st.good++; }
+  }
+  // 剧本E：单一来源理由不充分（环节③为关键闸口）
+  if(scn.soloSource&&i===2){
+    const el=document.getElementById.bind(document);
+    const m2=el('pmMethod')?el('pmMethod').value:'';
+    const r2=el('pmReason')?el('pmReason').value.trim():'';
+    if(m2==='单一来源'){
+      if(/唯一|专利|独家|原厂授权|只有|不可替代/.test(r2)){ S.soloFixed=true; st.good++; S.score+=5; S.events.push({type:'good',text:'环节③补强了单一来源法定理由并留档（+5分）'}); }
+      else{ warn='❌ "使用习惯/配合度高"不构成单一来源法定理由，应驳回重新论证或改用竞争性方式！扣15分'; S.score-=15; st.err++; S.events.push({type:'err',text:'环节③对理由不充分的单一来源申请误判通过（关键闸口失守）'}); }
+    }else{ S.soloFixed=true; st.good++; S.score+=5; S.events.push({type:'good',text:'环节③识别单一来源理由不充分，改用竞争性方式采购（+5分）'}); }
+  }
+  if(scn.soloSource&&i>2&&i<=6&&!S.soloFixed&&S.status[2]!=='reject'){ warn='⚠ 单一来源理由不充分未被纠正，带病流转至此！扣10分'; S.score-=10; st.err++; S.events.push({type:'err',text:`环节${'①②③④⑤⑥⑦⑧'[i]}未纠正不合规的单一来源采购（把关失守）`}); }
+  // 剧本F：技术参数指向特定品牌（环节⑤会签为关键闸口）
+  if(scn.specPoint){
+    if(i===4&&!S.specFixed){
+      warn='❌ 环节⑤《技术规格书》存在指向性参数（专用测头接口、特定软件内核），应驳回修订为通用参数！扣20分';
+      const el=document.getElementById.bind(document);
+      if(el('cs1')&&el('cs1').checked) warn+='（勾选"无指向性"与事实不符，会签流于形式）';
+      S.score-=20; st.err++; S.events.push({type:'err',text:'环节⑤未识别技术规格书倾向性参数（关键闸口失守）'});
+    }
+    else if(i>4&&i<=6&&!S.specFixed){ warn='⚠ 倾向性技术参数未被拦截，带病流转至此！扣10分'; S.score-=10; st.err++; S.events.push({type:'err',text:`环节${'①②③④⑤⑥⑦⑧'[i]}未拦截倾向性技术参数（把关失守）`}); }
+    else if(i===4&&S.specFixed){ S.events.push({type:'good',text:'环节⑤在规格书修订后审核放行，处理规范'}); st.good++; }
+  }
+  S.status[i]='done';
+  addLog('approve',i,`${STEPS[i].role}审核通过${warn?'（判定有误）':''}`);
+  if(warn){addLog('reject',i,warn);toast(warn)}else toast('✅ 审核通过');
+  if(i===7){ return finish(true); }
+  S.cur=i+1;visit(S.cur);S.round++;
+  render();
+}
+
+/* 驳回 */
+function openReject(){
+  const i=S.cur;
+  const targets=S.visited.filter(v=>v<i);
+  document.getElementById('modal').innerHTML=`<h3>✕ 驳回申请（环节${'①②③④⑤⑥⑦⑧'[i]}）</h3>
+    <label>退回到哪个环节？</label>
+    <select id="rTarget">${targets.map(t=>`<option value="${t}">${'①②③④⑤⑥⑦⑧'[t]} ${STEPS[t].name}</option>`).join('')}</select>
+    <label>驳回理由（必填，将通知被退回环节；写明具体整改要求更有利于闭环）</label>
+    <textarea id="rReason" placeholder="例如：缺少3家比价依据，请补齐后重新提交 / 累计金额已达公开招标限额，请合并采购 / 单一来源理由不充分，请重新论证采购方式 / 技术参数指向特定品牌，请修订规格书 / 超预算36万元，请先走预算调整程序 / 非办公必需品且仓库有闲置可调拨…"></textarea>
+    <div class="err" id="rErr">请填写驳回理由</div>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">取消</button><button class="btn reject" onclick="doReject()">确认驳回</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+/* 各剧本的关键把关环节（驳回发生在这些环节才算"把关正确"） */
+function correctGate(scn,from){
+  if(scn.wrong)return from===1;           // 剧本B：②必需性
+  if(scn.split)return from===1||from===2; // 剧本D：②初审台账/③采购台账
+  if(scn.soloSource)return from===2;      // 剧本E：③采购方式审核
+  if(scn.specPoint)return from===4;       // 剧本F：⑤会签参数审查
+  if(scn.overBudget)return from===3;      // 剧本C/G：④预算额度
+  return false;
+}
+
+function doReject(){
+  const reason=document.getElementById('rReason').value.trim();
+  if(!reason){document.getElementById('rErr').style.display='block';return}
+  const from=S.cur, to=parseInt(document.getElementById('rTarget').value);
+  const scn=SCENARIOS[S.scenario];
+  S.status[from]='reject';S.rejects++;S.score-=3;
+  S.stepStats[from].rejFrom++;S.stepStats[to].rejTo++;
+  const rightStep=correctGate(scn,from);
+  if(scn.split&&rightStep)S.splitFixed=true;
+  if(scn.soloSource&&rightStep)S.soloFixed=true;
+  if(scn.specPoint&&rightStep)S.specFixed=true;
+  if(rightStep){
+    S.events.push({type:'good',text:`环节${'①②③④⑤⑥⑦⑧'[from]}及时驳回问题申请（把关正确，+5分）`});
+    S.stepStats[from].good++;S.score+=5;
+  }else{
+    S.events.push({type:'warn',text:`环节${'①②③④⑤⑥⑦⑧'[from]}发起驳回，但问题环节在别处，造成流程绕行（-4分）`});
+    S.score-=4;
+  }
+  if(reason.length<10){S.events.push({type:'warn',text:'驳回理由过于简略，不利于退回环节一次性整改（-2分）'});S.score-=2;}
+  S.rejectsMade.push({from,to,reason});
+  addLog('reject',from,`驳回：退回环节${'①②③④⑤⑥⑦⑧'[to]}。理由：${reason}`);
+  S.cur=to;visit(to);S.round++;
+  if(to===0){S.req=null;} // 回到经办人重新填写
+  closeModal();render();
+  toast(`已退回环节${'①②③④⑤⑥⑦⑧'[to]}，请按角色重新处理`);
+}
+
+/* 预算调整 */
+function budgetAdjust(){
+  S.budgetFixed=true;S.score+=10;
+  S.events.push({type:'good',text:'环节④识别超预算并正确发起预算调整程序（+10分）'});
+  S.stepStats[3].good++;
+  addLog('info',3,'发起预算调整程序 → 分管领导/总办会审批同意调增设备预算至90万元');
+  toast('💰 预算调整已批准（+10分），可继续审核');
+  render();
+}
+
+/* ===== 剧本G：预算调整完整闭环（④打回→①申请→财务复核→领导审批→批件下达） ===== */
+function openBudgetAdjustReq(){
+  captureDraft();
+  document.getElementById('modal').innerHTML=`<h3>📝 预算调整申请（环节① 经办人）</h3>
+    <p style="font-size:12px;color:#64748b;background:#f8fafc;border-radius:8px;padding:8px 10px;line-height:1.7;margin:8px 0">预算调整不是"一键通过"：须由需求部门提交书面申请，经<b>财务复核 → 分管领导/总经理办公会审批</b>形成《预算调整批件》后，采购流程方可继续。</p>
+    <label>申请部门</label><input value="制造部（经办人）" disabled>
+    <label>调整科目</label><input value="设备购置预算" disabled>
+    <label>当前剩余额度（元）</label><input value="600,000" disabled>
+    <label>申请调增至（元）</label><input id="baAmount" value="960,000">
+    <label>调整原因（必填）</label><textarea id="baReason">《二期扩产立项报告》已经总经理办公会批准，注塑机采购测算总额96万元；现有设备购置预算剩余60万元，缺口36万元，申请调增设备购置预算至96万元。</textarea>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">取消</button><button class="btn primary" onclick="submitBudgetAdjReq()">提交申请（进入财务复核）</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+function submitBudgetAdjReq(){
+  const amount=document.getElementById('baAmount').value.trim();
+  const reason=document.getElementById('baReason').value.trim();
+  if(!amount||!reason){toast('⚠ 调整金额与调整原因为必填项');return}
+  addLog('info',0,`提交《预算调整申请》：设备购置预算调增至¥${amount}，原因：${reason}`);
+  S.events.push({type:'info',text:'环节①提交《预算调整申请》，进入财务复核'});
+  showBudgetAdjFin(amount);
+}
+function showBudgetAdjFin(amount){
+  document.getElementById('modal').innerHTML=`<h3>💰 预算调整 · 第1步：财务部复核</h3>
+    <p style="font-size:13px;line-height:1.9;color:#334155">财务部复核：<br>· 调整依据真实（《二期扩产立项报告》已批准）；<br>· 调增金额与测算缺口一致（¥360,000）；<br>· 资金来源已落实，对年度预算总盘子影响可控。<br><b>复核意见：同意报领导审批。</b></p>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">暂缓</button><button class="btn primary" onclick="budgetAdjFinPass('${amount}')">✔ 复核通过，报领导审批</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+function budgetAdjFinPass(amount){
+  addLog('info',3,'财务部复核通过《预算调整申请》，报分管领导/总经理办公会审批');
+  showBudgetAdjLeader(amount);
+}
+function showBudgetAdjLeader(amount){
+  document.getElementById('modal').innerHTML=`<h3>💰 预算调整 · 第2步：领导审批</h3>
+    <p style="font-size:13px;line-height:1.9;color:#334155">分管领导 / 总经理办公会审批：<br>· 调整事项与年度经营计划一致；<br>· 属于预算调整审批权限范围（重大事项集体决策）；<br>· 拟同意调增设备购置预算至 <b>¥${amount}</b>。<br><b>审批结论：同意调增。</b></p>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">不同意</button><button class="btn approve" onclick="budgetAdjLeaderPass('${amount}')">✔ 同意调增</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+function budgetAdjLeaderPass(amount){
+  addLog('info',5,'分管领导/总经理办公会审批同意：设备购置预算调增至¥'+amount);
+  showBudgetAdjDone(amount);
+}
+function showBudgetAdjDone(amount){
+  document.getElementById('modal').innerHTML=`<h3>📄 《预算调整批件》已下达</h3>
+    <p style="font-size:13px;line-height:1.9;color:#334155">批件编号：<b>YS-2026-036</b><br>调整内容：设备购置预算调增至 <b>¥${amount}</b><br>后续要求：批件随采购档案齐套归档备查；采购执行不得超出批复额度。</p>
+    <div class="foot"><button class="btn primary" onclick="budgetAdjDone('${amount}')">收到批件，回到采购流程</button></div>`;
+  document.getElementById('mask').classList.add('show');
+}
+function budgetAdjDone(amount){
+  S.budgetFixed=true;
+  S.adjustedBudget=`设备购置预算（已调增至¥${amount}，附《预算调整批件》YS-2026-036）`;
+  S.score+=10;
+  S.events.push({type:'good',text:'预算调整完整闭环：④打回 → ①申请 → 财务复核 → 领导审批 → 批件下达（+10分）'});
+  S.stepStats[3].good++;
+  addLog('info',0,'《预算调整批件》YS-2026-036 已下达并归档，携批件重新提交采购申请');
+  closeModal();render();
+  toast('💰 预算调整批件已下达（+10分），请重新提交采购申请');
+}
+
+/* 结束 */
+function finish(pass){
+  S.ended=true;
+  S.stepStats[7].pass++;
+  if(pass){
+    const r=S.rejects;
+    const scn=SCENARIOS[S.scenario];
+    const gatePill=(scn.split&&S.splitFixed)?'<span class="pill g">拦截化整为零</span>'
+      :(scn.soloSource&&S.soloFixed)?'<span class="pill g">纠正单一来源</span>'
+      :(scn.specPoint&&S.specFixed)?'<span class="pill g">拦截倾向性参数</span>':'';
+    const pills=[`<span class="pill ${r===0?'g':'a'}">驳回 ${r} 次</span>`,
+      S.budgetFixed?`<span class="pill a">${scn.budgetLoop?'预算调整闭环':'触发预算调整'}</span>`:'',
+      gatePill,
+      S.score>=90?'<span class="pill g">流程规范</span>':S.score>=70?'<span class="pill a">存在瑕疵</span>':'<span class="pill r">流程风险较高</span>'].join('');
+    S.result={pass:true,pills,msg:`《采购预算批复》已下达，货物验收合格，验收单、发票、合同${scn.budgetLoop&&S.budgetFixed?'、《预算调整批件》':''}已齐套归档（留痕5年）。<br><br>本次演练共流转 <b>${S.round}</b> 次。${r>0?`过程中发生 ${r} 次驳回——<b>规范的驳回与调整正是内控制度的价值所在</b>。`:'全程一次通过。'}`};
+  }
+  addLog('approve',7,'验收、结算、归档完成，流程闭环');
+  S.report=computeAnalysis();
+  render();
+  setTimeout(showReport,500);
+}
+
+/* ============ 流程分析引擎 ============ */
+function dimScores(){
+  const scn=SCENARIOS[S.scenario];
+  const errs=S.stepStats.reduce((a,s)=>a+s.err,0);
+  const goods=S.stepStats.reduce((a,s)=>a+s.good,0);
+  // 1 合规风控：关键闸口是否守住
+  let compliance=100 - errs*22 - Math.max(0,S.rejectsMade.length-goods)*3;
+  if(scn.overBudget) compliance=S.budgetFixed?Math.min(100,compliance+8):compliance;
+  if(scn.split) compliance=S.splitFixed?Math.min(100,compliance+8):compliance;
+  if(scn.soloSource) compliance=S.soloFixed?Math.min(100,compliance+8):compliance;
+  if(scn.specPoint) compliance=S.specFixed?Math.min(100,compliance+8):compliance;
+  // 2 审核严谨：误判 + 驳回理由质量 + 附件完整性 + 会签完整性
+  let rigor=100 - errs*10 - S.rejectsMade.filter(r=>r.reason.length<10).length*10 - (S.attachWarns||0)*8 - (S.signWarn||0)*4;
+  // 3 流转效率：实际流转次数 vs 合理次数
+  const optimal = scn.wrong?(S.cancelled?4:10)
+    : scn.overBudget?(S.budgetFixed?(scn.budgetLoop?12:11):13)
+    : scn.split?(S.splitFixed?11:12)
+    : scn.soloSource?(S.soloFixed?11:12)
+    : scn.specPoint?(S.specFixed?13:14)
+    : 8;
+  let eff=Math.max(40,100-Math.max(0,S.round-optimal)*7);
+  // 4 驳回管理：驳回是否发生在正确的环节
+  const gated=scn.wrong||(scn.overBudget&&!S.budgetFixed)||(scn.split&&!S.splitFixed)||(scn.soloSource&&!S.soloFixed)||(scn.specPoint&&!S.specFixed);
+  let rejMgmt;
+  if(S.rejectsMade.length===0){
+    rejMgmt=gated?55:(scn.overBudget?92:95);
+  }
+  else{
+    const misplaced=S.rejectsMade.filter(r=>!correctGate(scn,r.from)).length;
+    rejMgmt=Math.max(0,100-misplaced*18);
+  }
+  if(S.cancelled) rejMgmt=Math.max(rejMgmt,92);
+  // 5 归档收尾
+  let archive=S.cancelled?88:(S.ended&&S.result&&S.result.pass?100:40);
+  return [
+    {name:'合规风控',score:Math.max(0,Math.min(100,Math.round(compliance)))},
+    {name:'审核严谨',score:Math.max(0,Math.min(100,Math.round(rigor)))},
+    {name:'流转效率',score:Math.max(0,Math.min(100,Math.round(eff)))},
+    {name:'驳回管理',score:Math.max(0,Math.min(100,Math.round(rejMgmt)))},
+    {name:'归档收尾',score:Math.max(0,Math.min(100,Math.round(archive)))}
+  ];
+}
+function gradeOf(t){return t>=90?['优','#16a34a']:t>=75?['良','#2563eb']:t>=60?['合格','#d97706']:['待改进','#dc2626']}
+
+function computeAnalysis(){
+  const dims=dimScores().map(d=>(!S.ended&&!S.cancelled&&d.name==='归档收尾')?{...d,pending:true}:d);
+  const scored=dims.filter(d=>!d.pending);
+  const dimAvg=scored.reduce((a,d)=>a+d.score,0)/scored.length;
+  const liveScore=Math.min(100,Math.max(0,S.score));
+  const total=Math.round(dimAvg*0.6+liveScore*0.4); // 维度分析60% + 过程流程分40%
+  const [g,gc]=gradeOf(total);
+  const rows=STEPS.map((s,i)=>{
+    const st=S.stepStats[i];
+    let evalTxt='未到达',evalCls='pill a';
+    if(st.err>0){evalTxt='⚠ 存在误判';evalCls='pill r';}
+    else if(st.good>0){evalTxt='★ 把关到位';evalCls='pill g';}
+    else if(st.rejFrom>0){evalTxt='执行了驳回';evalCls='pill a';}
+    else if(st.visits>0){evalTxt='✓ 正常流转';evalCls='pill g';}
+    return {name:`${'①②③④⑤⑥⑦⑧'[i]} ${s.name}`,...st,evalTxt,evalCls};
+  });
+  const sugg=[];
+  [...dims].filter(d=>!d.pending).sort((a,b)=>a.score-b.score).slice(0,2).forEach(d=>{
+    if(d.name==='合规风控'&&d.score<90)sugg.push('关键环节（②部门初审、④财务审核）出现误判通过——这是采购内控最核心的两道闸口，建议对照"必要性、替代方案、预算额度"清单逐项核对后再放行。');
+    if(d.name==='审核严谨'&&d.score<90)sugg.push('驳回时应写明具体理由与整改要求（如"补齐3家比价""先走预算调整"），便于被退回环节一次性整改到位、避免反复往返。');
+    if(d.name==='流转效率'&&d.score<90)sugg.push('流程出现多次往返，实际工作中会拉长采购周期。建议需求部门在提交前完成比价与预算自查，从源头减少退回。');
+    if(d.name==='驳回管理'&&d.score<90)sugg.push('驳回应发生在问题发生的环节（②必需性、④预算额度），并跟进整改闭环；在错误环节驳回会让问题"带病流转"。');
+    if(d.name==='归档收尾'&&d.score<90)sugg.push('流程未完整走完验收与归档。实际工作中，验收单、发票、合同必须齐套归档（留痕3–5年），否则无法通过审计备查。');
+  });
+  if((S.attachWarns||0)>0)sugg.push('申请附件不完整（技术规格书/立项文件缺失）——附件是各环节审查的载体，缺件会使后续审查无从下手，应一次性备齐申请单、比价单、技术规格书、立项文件。');
+  if((S.signWarn||0)>0)sugg.push('专业会签未逐项确认——会签是对技术参数指向性、合同付款条款、政策合规（节能环保/国产化/进口核准）与验收方案的专项把关，流于形式会让问题"带病"通过。');
+  const scna=SCENARIOS[S.scenario];
+  if((scna.split&&!S.splitFixed)||(scna.soloSource&&!S.soloFixed))sugg.push('采购方式类问题（化整为零/单一来源理由不充分）应由环节③归口把关：对照公开招标数额标准核对同类采购累计金额，对照法定情形（唯一供应商/专利/原厂授权）核对单一来源论证。');
+  if(scna.specPoint&&!S.specFixed)sugg.push('技术规格书倾向性参数应由环节⑤会签把关：专用接口、特定软件内核、仅某品牌满足的参数组合都属变相圈定品牌，应退回修订为通用技术描述。');
+  if(scna.budgetLoop&&!S.budgetFixed)sugg.push('超预算必须走完整调整闭环：打回 → 书面《预算调整申请》 → 财务复核 → 领导审批 → 批件下达归档，不能以"口头同意"或跳过批件的方式直接执行。');
+  if(sugg.length===0)sugg.push('整体执行规范：问题在正确环节被识别，驳回理由清晰，整改后重新流转并完成归档，内控链条完整。请继续保持这种"该拦则拦、该放则放"的审批习惯。');
+  return {dims,total,grade:g,gradeColor:gc,rows,events:S.events,sugg};
+}
+
+function dimBar(d){
+  if(d.pending)return `<div class="bar-row"><div class="bar-name">${d.name}</div><div class="bar-track"></div><div class="bar-val" style="color:#94a3b8">待定</div></div>`;
+  const col=d.score>=85?'#16a34a':d.score>=70?'#2563eb':d.score>=55?'#d97706':'#dc2626';
+  return `<div class="bar-row"><div class="bar-name">${d.name}</div><div class="bar-track"><div class="bar-fill" style="width:${d.score}%;background:${col}"></div></div><div class="bar-val" style="color:${col}">${d.score}</div></div>`;
+}
+
+function radarSVG(dims){
+  const cx=150,cy=132,R=92,n=dims.length;
+  const pt=(idx,r)=>{const a=-Math.PI/2+idx*2*Math.PI/n;return [cx+r*Math.cos(a),cy+r*Math.sin(a)]};
+  let grid='',axes='',labels='';
+  [0.25,0.5,0.75,1].forEach(f=>{
+    grid+=`<polygon points="${dims.map((_,i)=>pt(i,R*f).map(v=>v.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="#e2e8f0"/>`;
+  });
+  dims.forEach((d,i)=>{
+    const [x,y]=pt(i,R);
+    axes+=`<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e2e8f0"/>`;
+    const [lx,ly]=pt(i,R+24);
+    labels+=`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="11" fill="#475569">${d.name}</text>`;
+    if(!d.pending)labels+=`<text x="${lx.toFixed(1)}" y="${(ly+13).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="600" fill="#2563eb">${d.score}分</text>`;
+  });
+  const poly=dims.map((d,i)=>pt(i,R*(d.pending?0:d.score)/100).map(v=>v.toFixed(1)).join(',')).join(' ');
+  const dots=dims.filter(d=>!d.pending).map((d)=>{const idx=dims.indexOf(d);const[x,y]=pt(idx,R*d.score/100);return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="#2563eb"/>`}).join('');
+  return `<svg viewBox="0 0 300 268" style="width:100%;max-width:330px;display:block;margin:0 auto">${grid}${axes}<polygon points="${poly}" fill="rgba(37,99,235,.16)" stroke="#2563eb" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+
+/* 实时分析面板 */
+function renderAnalysis(){
+  const ms=document.getElementById('miniStats');
+  if(!ms)return;
+  const errs=S.stepStats.reduce((a,s)=>a+s.err,0);
+  const goods=S.stepStats.reduce((a,s)=>a+s.good,0);
+  ms.innerHTML=[['流转轮次',S.round],['驳回',S.rejects],['误判',errs],['把关亮点',goods]]
+    .map(([k,v])=>`<div class="ms"><b style="color:${k==='误判'&&v>0?'var(--red)':k==='把关亮点'&&v>0?'var(--green)':'var(--blue)'}">${v}</b><span>${k}</span></div>`).join('');
+  const dims=dimScores().map(d=>(!S.ended&&!S.cancelled&&d.name==='归档收尾')?{...d,pending:true}:d);
+  document.getElementById('dimBars').innerHTML=dims.map(d=>dimBar(d)).join('');
+  const tips=[];
+  if(errs>0)tips.push('⚠ 已出现误判通过，关键闸口（②必需性 / ③采购方式台账 / ④预算额度 / ⑤会签参数）职责未履行到位。');
+  const scn=SCENARIOS[S.scenario];
+  if(scn.overBudget&&!scn.budgetLoop&&!S.budgetFixed&&S.cur>=2&&!S.ended)tips.push('💰 提示：本单总价超出设备预算剩余额度，环节④须核对剩余额度并考虑预算调整程序。');
+  if(scn.split&&S.cur<=2&&!S.ended&&S.stepStats[0].pass>0)tips.push('🔍 提示：请核对近90天同类采购台账——多笔小额累计是否达到公开招标数额标准（化整为零）。');
+  if(scn.soloSource&&S.cur===2&&!S.ended)tips.push('🔍 提示：单一来源须满足法定情形（唯一供应商/专利/原厂授权），"使用习惯、配合度高"不构成充分理由。');
+  if(scn.specPoint&&S.cur===4&&!S.ended)tips.push('🔍 提示：会签前先核对《技术规格书》——专用接口、特定软件内核等倾向性参数会变相圈定品牌。');
+  if(scn.budgetLoop&&!S.budgetFixed&&S.cur>=2&&S.cur<=4&&!S.ended)tips.push('💰 提示：本单超出预算剩余额度。须驳回至环节①，由经办人提交《预算调整申请》，经财务复核、领导审批形成批件后方可继续。');
+  if(scn.wrong&&S.cur<=1&&!S.ended&&S.stepStats[0].pass>0)tips.push('🔍 提示：环节②应先核对必要性与替代方案（调拨/租赁/修旧利废）再放行。');
+  if(S.rejects>0&&errs===0)tips.push('✅ 驳回机制运行中——请确保理由具体、整改要求明确，形成闭环。');
+  document.getElementById('liveTips').innerHTML=tips.join('<br>')||'流程正常推进中。各环节审核要点详见左侧流程图。';
+}
+
+/* 完整分析报告 */
+function showReport(){
+  if(!S.report)S.report=computeAnalysis();
+  const r=S.report;
+  const evts=r.events.length? r.events.map(e=>`<div class="log-item ${e.type==='err'?'reject':e.type==='good'?'approve':'info'}" style="margin:4px 0">${e.text}</div>`).join('') : '<div style="color:var(--gray);font-size:12px">暂无关键事件记录</div>';
+  document.getElementById('modal').innerHTML=`
+   <div class="report">
+    <h3>📋 采购流程分析报告</h3>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#f8fafc;border-radius:10px;padding:10px 14px">
+      <div style="font-size:13px"><b>${SCENARIOS[S.scenario].title}</b><br><span style="color:var(--gray);font-size:11.5px">流转 ${S.round} 轮 · 驳回 ${S.rejects} 次 · ${S.cancelled?'申请撤销':(S.ended?'已完成归档':'进行中')}</span></div>
+      <div style="margin-left:auto;text-align:center"><div style="font-size:30px;font-weight:700;color:${r.gradeColor}">${r.total}</div><div style="font-size:11px;color:var(--gray)">综合得分</div></div>
+      <span class="grade" style="background:${r.gradeColor}">${r.grade}</span>
+    </div>
+    ${radarSVG(r.dims)}
+    <h4>一、维度评价</h4>
+    <div class="dim-bars">${r.dims.map(d=>dimBar(d)).join('')}</div>
+    <h4>二、环节执行分析</h4>
+    <div style="overflow-x:auto"><table class="rpt">
+      <tr><th>环节</th><th>到达</th><th>通过</th><th>发起驳回</th><th>被退回</th><th>误判</th><th>评价</th></tr>
+      ${r.rows.map(w=>`<tr><td class="l">${w.name}</td><td>${w.visits}</td><td>${w.pass}</td><td>${w.rejFrom||'—'}</td><td>${w.rejTo||'—'}</td><td>${w.err||'—'}</td><td><span class="${w.evalCls}">${w.evalTxt}</span></td></tr>`).join('')}
+    </table></div>
+    <h4>三、关键事件回顾</h4>
+    <div style="max-height:180px;overflow:auto">${evts}</div>
+    <h4>四、评估结论与改进建议</h4>
+    <div class="sugg">${r.sugg.map(s=>`• ${s}`).join('<br>')}</div>
+    <div class="foot"><button class="btn secondary" onclick="closeModal()">关闭</button></div>
+   </div>`;
+  document.getElementById('mask').classList.add('show');
+}
+
+function restart(){pickScenario()}
+
+/* 初始化 */
+S=freshState();
+render();
+</script>
+</body>
+</html>
